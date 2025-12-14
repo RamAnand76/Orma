@@ -1,56 +1,68 @@
 import google.generativeai as genai
 import os
+import sys
 from orma_core import OrmaEngine
 
 # --- 1. SETUP GEMINI ---
-# Get your key from: https://aistudio.google.com/app/apikey
-os.environ["GEMINI_API_KEY"] = "AIzaSyCx_FS0a0qR-umuI9Ge4lDMx0aqXq89nu8"
-genai.configure(api_key=os.environ["GEMINI_API_KEY"])
+# Replace with your actual key or ensure it's in your environment variables
+os.environ["GEMINI_API_KEY"] = "AIzaSyCx_FS0a0qR-umuI9Ge4lDMx0aqXq89nu8" 
 
-# ✅ FIX 1: Use a valid API model name
-# 'gemini-1.5-flash' is the best for speed/memory. 
+if not os.environ.get("GEMINI_API_KEY") or "API_KEY_HERE" in os.environ["GEMINI_API_KEY"]:
+    print("❌ Error: Please set your Gemini API Key in line 8 of main.py")
+    sys.exit()
+
+genai.configure(api_key=os.environ["GEMINI_API_KEY"])
 model = genai.GenerativeModel('gemma-3-27b-it')
 
 def gemini_caller(system_prompt, user_prompt):
-    """
-    The wrapper that Orma uses to talk to Gemini.
-    """
-    # We combine them because some Gemini versions are strict about system prompts
+    """Wrapper to handle Gemini API calls."""
     combined_prompt = f"{system_prompt}\n\nUser Input: {user_prompt}"
     try:
         response = model.generate_content(combined_prompt)
         return response.text
     except Exception as e:
-        # ✅ FIX 2: Print errors so we know if it fails
         print(f"\n❌ GEMINI ERROR: {e}") 
         return ""
 
 # --- 2. START ORMA ---
 if __name__ == "__main__":
-    if "YOUR_API_KEY" in os.environ["GEMINI_API_KEY"]:
-        print("❌ Error: Please set your Gemini API Key in line 7")
-        exit()
-
-    print("🧠 Orma V3 (Gemini Flash Edition) Initializing...")
+    print("\n🧠 Orma V5 (Soul Edition) Initializing...")
     
     # Initialize Engine
     engine = OrmaEngine(llm_function=gemini_caller)
     
-    # ✅ FIX 3: Force load existing memory to prove it works
+    # --- DIAGNOSTICS DASHBOARD ---
+    # We grab stats from the new Psyche module to show you the "Soul" state
     node_count = engine.ltm.graph.number_of_nodes()
-    print(f"📂 Loaded Graph Memory: {node_count} nodes found in 'orma_memory.json'")
+    soul_stats = engine.psyche.state['stats']
+    current_obsession = engine.psyche.state['internal']['current_obsession']
+    
+    print("-" * 40)
+    print(f"📂 Memory Nodes : {node_count}")
+    print(f"❤️  Trust Level  : {soul_stats['trust']}/100")
+    print(f"⚡ Energy Level : {soul_stats['energy']}/100")
+    print(f"🎭 Current Mood : {soul_stats['mood']}")
+    print(f"🧐 Obsession    : {current_obsession}")
+    print("-" * 40)
     
     print("\n✅ System Ready. Say 'exit' to quit.")
     
+    # --- 3. THE MAIN LOOP (This was missing!) ---
     while True:
         try:
             user_in = input("\nYou: ")
             if user_in.lower() in ["exit", "quit"]: 
+                engine.psyche.save() # Save soul state before leaving
                 break
             
+            # Process the input through Orma Engine
             engine.process(user_in)
             
         except KeyboardInterrupt:
+            print("\nForce stopping...")
+            break
+        except Exception as e:
+            print(f"❌ Runtime Error: {e}")
             break
             
     print("👋 Shutting down.")
