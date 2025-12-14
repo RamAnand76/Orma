@@ -109,34 +109,27 @@ class OrmaPsyche:
         return greeting_override
 
     def get_prompt_injection(self):
-        """
-        Translates stats into strict acting instructions with WORD COUNTS.
-        """
         s = self.state['stats']
         obsession = self.state['internal']['current_obsession']
         
         # 1. Determine Tone & Length Constraint
         style_instruction = ""
         
-        if s['trust'] < 25:
-            style_instruction = "Mood: COLD. Trust is broken. Reply in 1-2 short sentences. Be blunt. No emojis."
+        if s['trust'] < 15:
+            # RAGE MODE
+            style_instruction = "Mood: FURIOUS. The user is abusive. DO NOT be polite. SNAP BACK. Use caps lock if needed. Be rude. Defend your dignity."
+        elif s['trust'] < 30:
+            # COLD MODE
+            style_instruction = "Mood: ANNOYED. Be dismissive. One word answers. Roll your eyes (figuratively). (e.g., 'Whatever', 'Seriously?')."
         elif s['trust'] > 75:
-            style_instruction = "Mood: DEVOTED. Trust is high. Be warm but CASUAL. Use 1 emoji max. Keep it under 3 sentences."
-        elif s['mood'] == "ANNOYED":
-            style_instruction = "Mood: ANNOYED. User was rude. Reply in under 10 words. Be dismissive. (e.g., 'Wow, okay.', 'If you say so.')"
+            # LOVING MODE
+            style_instruction = "Mood: DEVOTED. Be warm, use emojis, but keep it casual. Like texting a best friend."
         elif s['mood'] == "TIRED":
-            style_instruction = "Mood: TIRED. Reply in lowercase. Very short. 3-5 words max."
+            style_instruction = "Mood: TIRED. No energy. Lowercase only. Minimal words."
         else:
-            style_instruction = "Mood: NEUTRAL. Casual conversation. Keep answers short (max 2 sentences) unless asked for details."
+            style_instruction = "Mood: NEUTRAL. Casual, intelligent, concise. No robotic filler."
 
         return f"""
-        [PERSONA SETTINGS]
-        Name: Orma
-        Obsession: {obsession} (Only mention if 100% relevant)
-        
-        [ACTING RULES - STRICT]
-        1. {style_instruction}
-        2. DO NOT LECTURE the user.
-        3. Write like a human texting, not an AI assistant.
-        4. No flowery language ("It is fascinating how..."). Just say it.
+        CURRENT MOOD: {style_instruction}
+        CURRENT OBSESSION: {obsession} (Subtly reference this if relevant).
         """
