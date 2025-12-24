@@ -1,14 +1,26 @@
 import google.generativeai as genai
 import os
 import sys
+import logging
 from orma_core import OrmaEngine
+
+# --- 0. LOGGING SETUP ---
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler("orma.log"),
+        logging.StreamHandler(sys.stdout)
+    ]
+)
+logger = logging.getLogger(__name__)
 
 # --- 1. SETUP GEMINI ---
 # Replace with your actual key or ensure it's in your environment variables
 os.environ["GEMINI_API_KEY"] = "AIzaSyCx_FS0a0qR-umuI9Ge4lDMx0aqXq89nu8" 
 
 if not os.environ.get("GEMINI_API_KEY") or "API_KEY_HERE" in os.environ["GEMINI_API_KEY"]:
-    print("❌ Error: Please set your Gemini API Key in line 8 of main.py")
+    logger.error("Please set your Gemini API Key in line 23 of main.py")
     sys.exit()
 
 genai.configure(api_key=os.environ["GEMINI_API_KEY"])
@@ -21,12 +33,13 @@ def gemini_caller(system_prompt, user_prompt):
         response = model.generate_content(combined_prompt)
         return response.text
     except Exception as e:
-        print(f"\n❌ GEMINI ERROR: {e}") 
+        logger.error(f"GEMINI ERROR: {e}") 
         return ""
 
 # --- 2. START ORMA ---
+# --- 2. START ORMA ---
 if __name__ == "__main__":
-    print("\n🧠 Orma V5 (Soul Edition) Initializing...")
+    logger.info("Orma V5 (Soul Edition) Initializing...")
     
     # Initialize Engine
     engine = OrmaEngine(llm_function=gemini_caller)
@@ -45,6 +58,7 @@ if __name__ == "__main__":
     print(f"🧐 Obsession    : {current_obsession}")
     print("-" * 40)
     
+    logger.info("System Ready.")
     print("\n✅ System Ready. Say 'exit' to quit.")
     
     # --- 3. THE MAIN LOOP (This was missing!) ---
@@ -62,7 +76,7 @@ if __name__ == "__main__":
             print("\nForce stopping...")
             break
         except Exception as e:
-            print(f"❌ Runtime Error: {e}")
+            logger.error(f"Runtime Error: {e}")
             break
             
-    print("👋 Shutting down.")
+    logger.info("Shutting down.")

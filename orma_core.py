@@ -4,21 +4,20 @@ import time
 import os
 import re
 import numpy as np
+import logging
 from collections import deque
 from sentence_transformers import SentenceTransformer
 from sklearn.metrics.pairwise import cosine_similarity
 
-# --- IMPORT THE NEW MODULE ---
+# --- IMPORT CONFIG & SUB-MODULES ---
+import config
 from orma_psyche import OrmaPsyche
 
-# --- CONFIGURATION ---
-EMBEDDING_MODEL = "all-MiniLM-L6-v2"
-STM_CAPACITY = 10     
-SIMILARITY_THRESHOLD = 0.65 
+logger = logging.getLogger(__name__)
 
 # --- MEMORY MODULES ---
 class ShortTermMemory:
-    def __init__(self, capacity=STM_CAPACITY):
+    def __init__(self, capacity=config.STM_CAPACITY):
         self.history = deque(maxlen=capacity)
     def add_turn(self, role, content):
         self.history.append({"role": role, "content": content})
@@ -26,10 +25,10 @@ class ShortTermMemory:
         return "\n".join([f"{msg['role'].upper()}: {msg['content']}" for msg in self.history])
 
 class GraphMemory:
-    def __init__(self, filepath="orma_memory.json"):
+    def __init__(self, filepath=config.DEFAULT_MEMORY_FILE):
         self.filepath = filepath
-        print("🔌 Loading Orma Cortex...")
-        self.model = SentenceTransformer(EMBEDDING_MODEL) 
+        logger.info("Loading Orma Cortex...")
+        self.model = SentenceTransformer(config.EMBEDDING_MODEL) 
         self.graph = nx.DiGraph()
         self.load()
 
@@ -38,24 +37,37 @@ class GraphMemory:
 
     def find_similar_node(self, text):
         if self.graph.number_of_nodes() == 0: return None, 0.0
+        
         query_vec = self.model.encode(text).reshape(1, -1)
-        best_score = -1
-        best_node = None
-        for node, data in self.graph.nodes(data=True):
-            if 'embedding' in data:
-                score = cosine_similarity(query_vec, np.array(data['embedding']).reshape(1, -1))[0][0]
-                if score > best_score:
-                    best_score = score
-                    best_node = node
+        
+        nodes = []
+        embeddings = []
+        
+        # Batch extraction (Optimized Phase 1)
+        for n, d in self.graph.nodes(data=True):
+            if 'embedding' in d:
+                nodes.append(n)
+                embeddings.append(d['embedding'])
+        
+        if not nodes:
+            return None, 0.0
+            
+        embedding_matrix = np.array(embeddings)
+        scores = cosine_similarity(query_vec, embedding_matrix)[0]
+        
+        best_idx = np.argmax(scores)
+        best_score = scores[best_idx]
+        best_node = nodes[best_idx]
+
         return best_node, best_score
 
     def add_triplet(self, source, relation, target):
         s_node, s_score = self.find_similar_node(source)
-        final_s = s_node if s_score >= SIMILARITY_THRESHOLD else self._sanitize(source)
+        final_s = s_node if s_score >= config.SIMILARITY_THRESHOLD else self._sanitize(source)
         if not self.graph.has_node(final_s): self.graph.add_node(final_s, embedding=self._embed(source))
 
         t_node, t_score = self.find_similar_node(target)
-        final_t = t_node if t_score >= SIMILARITY_THRESHOLD else self._sanitize(target)
+        final_t = t_node if t_score >= config.SIMILARITY_THRESHOLD else self._sanitize(target)
         if not self.graph.has_node(final_t): self.graph.add_node(final_t, embedding=self._embed(target))
 
         self.graph.add_edge(final_s, final_t, relation=self._sanitize(relation))
@@ -64,7 +76,7 @@ class GraphMemory:
 
     def search(self, query):
         node, score = self.find_similar_node(query)
-        if not node or score < SIMILARITY_THRESHOLD: return []
+        if not node or score < config.SIMILARITY_THRESHOLD: return []
         results = []
         for n in self.graph.successors(node):
             results.append(f"{node} {self.graph[node][n]['relation']} {n}")
@@ -81,11 +93,15 @@ class GraphMemory:
         return "user"
 
     def save(self):
-        with open(self.filepath, 'w') as f: json.dump(nx.node_link_data(self.graph), f)
+        try:
+            with open(self.filepath, 'w') as f: json.dump(nx.node_link_data(self.graph), f)
+        except Exception as e:
+            logger.error(f"Failed to save memory: {e}")
+
     def load(self):
         if os.path.exists(self.filepath):
             try: self.graph = nx.node_link_graph(json.load(open(self.filepath)))
-            except: pass
+            except Exception as e: logger.error(f"Failed to load memory: {e}")
 
 # --- ORMA ENGINE ---
 class OrmaEngine:
@@ -99,6 +115,7 @@ class OrmaEngine:
         # Trigger Dreaming
         dream_msg = self.psyche.dream(self.ltm.graph)
         if dream_msg:
+            logger.info(f"Orma Wakes Up: {dream_msg}")
             print(f"\n💤 Orma Wakes Up: {dream_msg}\n")
 
     def _extract_entities(self, text):
@@ -117,6 +134,7 @@ class OrmaEngine:
             sentiment = self.psyche.analyze_sentiment(user_input)
             if sentiment < 1: 
                 response = "I'm done. Don't talk to me."
+                logger.warning(f"Orma (DONE): {response}")
                 print(f"🤖 Orma (DONE): {response}")
                 return response
         
@@ -155,6 +173,7 @@ class OrmaEngine:
         """
         
         response = self.llm_func(system_prompt, user_input)
+        logger.info(f"Orma Response generated using {config.EMBEDDING_MODEL}") # Metadata log
         print(f"🤖 Orma: {response}")
 
         self.stm.add_turn("user", user_input)
@@ -185,7 +204,9 @@ class OrmaEngine:
                     entry = self.ltm.add_triplet(t['source'], t['relation'], t['target'])
                     if "name" in t['relation'] and t['source'] == "user":
                         self.user_alias = t['target']
+                    logger.debug(f"Learned: {entry}")
                     print(f"   💾 Learned: {entry}")
                 return len(triplets) > 0 # Return True if learned something
-        except: pass
+        except Exception as e:
+            logger.warning(f"Memory extraction failed: {e}")
         return False
