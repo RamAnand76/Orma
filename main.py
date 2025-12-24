@@ -71,6 +71,7 @@ if __name__ == "__main__":
         try:
             user_in = input("\nYou: ")
             if user_in.lower() in ["exit", "quit"]: 
+                engine.consolidate_memory() # <--- NEW: Save Episode
                 engine.psyche.save() # Save soul state before leaving
                 break
             

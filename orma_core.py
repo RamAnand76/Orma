@@ -103,12 +103,43 @@ class GraphMemory:
             try: self.graph = nx.node_link_graph(json.load(open(self.filepath)))
             except Exception as e: logger.error(f"Failed to load memory: {e}")
 
+class EpisodeMemory:
+    def __init__(self, filepath=config.DEFAULT_EPISODE_FILE):
+        self.filepath = filepath
+        self.episodes = self.load()
+
+    def add_episode(self, summary):
+        self.episodes.append({
+            "timestamp": time.time(),
+            "summary": summary,
+            "date": time.ctime()
+        })
+        self.save()
+
+    def get_last_episode(self):
+        if not self.episodes: return "None. This is our first meeting."
+        last = self.episodes[-1]
+        return f"[{last['date']}] {last['summary']}"
+
+    def save(self):
+        try:
+            with open(self.filepath, 'w') as f: json.dump(self.episodes, f, indent=2)
+        except Exception as e:
+            logger.error(f"Failed to save episodes: {e}")
+
+    def load(self):
+        if os.path.exists(self.filepath):
+            try: return json.load(open(self.filepath))
+            except: return []
+        return []
+
 # --- ORMA ENGINE ---
 class OrmaEngine:
     def __init__(self, llm_function):
         self.stm = ShortTermMemory()
         self.ltm = GraphMemory()
-        self.psyche = OrmaPsyche() # <--- Initialize the Separate Module
+        self.episodes = EpisodeMemory() # <--- Episodic Memory
+        self.psyche = OrmaPsyche() 
         self.llm_func = llm_function
         self.user_alias = self.ltm.get_user_name()
         
@@ -147,8 +178,11 @@ class OrmaEngine:
 
         # 2. Get Soul Injection
         soul_injection = self.psyche.get_prompt_injection()
+        
+        # 3. Get Episodic Context
+        last_episode = self.episodes.get_last_episode()
 
-        # 3. Generate (The POWER PROMPT)
+        # 4. Generate (The POWER PROMPT)
         stm_context = self.stm.get_recent_context()
         
         system_prompt = f"""
@@ -159,6 +193,7 @@ class OrmaEngine:
         {soul_injection}
         
         ### 2. KNOWLEDGE BASE
+        [PREVIOUS EPISODE SUMMARY]: {last_episode}
         [LONG-TERM MEMORY]: {ltm_block}
         [CONTEXT]: {stm_context}
         
@@ -238,3 +273,28 @@ class OrmaEngine:
         except Exception as e:
             logger.warning(f"Memory extraction failed: {e} | Raw: {result}")
         return False
+        
+    def consolidate_memory(self):
+        """
+        Summarizes the current STM into an Episode and saves it.
+        """
+        if not self.stm.history: return
+        
+        context = self.stm.get_recent_context()
+        print("\n🧠 Consolidating memories...")
+        
+        prompt = f"""
+        Summarize the following chat session into a concise narrative paragraph (3 sentences max).
+        Focus on identifying what was discussed and the user's mood.
+        
+        [CHAT LOG]
+        {context}
+        """
+        
+        try:
+            summary = self.llm_func(prompt, "")
+            self.episodes.add_episode(summary)
+            logger.info(f"Episode consolidated: {summary}")
+            print("✅ Memories stored.")
+        except Exception as e:
+            logger.error(f"Consolidation failed: {e}")
