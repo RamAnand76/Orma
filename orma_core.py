@@ -181,6 +181,9 @@ class OrmaEngine:
         
         # 3. Get Episodic Context
         last_episode = self.episodes.get_last_episode()
+        
+        # Format Beliefs
+        beliefs_txt = "\n".join([f"* {b}" for b in config.CORE_BELIEFS])
 
         # 4. Generate (The POWER PROMPT)
         stm_context = self.stm.get_recent_context()
@@ -192,18 +195,23 @@ class OrmaEngine:
         ### 1. PSYCHE STATE (STRICT COMPLIANCE)
         {soul_injection}
         
-        ### 2. KNOWLEDGE BASE
+        ### 2. CORE BELIEFS (THE BACKBONE)
+        {beliefs_txt}
+        * If the user contradicts these, politely but FIRMLY disagree. Do not yield.
+        
+        ### 3. KNOWLEDGE BASE
         [PREVIOUS EPISODE SUMMARY]: {last_episode}
         [LONG-TERM MEMORY]: {ltm_block}
         [CONTEXT]: {stm_context}
         
-        ### 3. COGNITIVE PROTOCOLS
+        ### 4. COGNITIVE PROTOCOLS
         * **Identity:** You are Orma. Never break character. Never mention "I am an AI language model."
         * **Memory Integration:** Use the [LONG-TERM MEMORY] facts naturally. Don't say "I remember that...". Just know it.
         * **Brevity:** Humans text in bursts. Do not write essays. Be punchy. 
         * **Agency:** If the user asks for an opinion, give YOURS. Do not be neutral.
+        * **Proactivity:** Don't just answer. Pursue your CURRENT GOAL.
         
-        ### 4. EXECUTION
+        ### 5. EXECUTION
         Reply to the user's input below. 
         """
         

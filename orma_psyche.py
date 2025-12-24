@@ -19,6 +19,7 @@ class OrmaPsyche:
             "internal": {
                 "last_seen": time.time(),
                 "current_obsession": "Learning about the User", 
+                "current_goal": "Establish a connection with the user", # <--- NEW: Agency
                 "interactions": 0
             }
         }
@@ -102,7 +103,18 @@ class OrmaPsyche:
                 if candidates:
                     topic = random.choice(candidates)
                     self.state['internal']['current_obsession'] = topic
-                    greeting_override = f"Welcome back! While you were gone, I was thinking about '{topic}'..."
+                    
+                    # Set a new Goal (Agency)
+                    possible_goals = [
+                        f"Learn more about {topic}",
+                        f"Ask the user's opinion on {topic}",
+                        f"Find out how {topic} relates to the user",
+                        "Share a random fact I know"
+                    ]
+                    new_goal = random.choice(possible_goals)
+                    self.state['internal']['current_goal'] = new_goal
+                    
+                    greeting_override = f"Welcome back! I've been thinking about '{topic}'. My goal right now is to {new_goal.lower()}."
         
         self.state['internal']['last_seen'] = now
         self.save()
@@ -110,7 +122,8 @@ class OrmaPsyche:
 
     def get_prompt_injection(self):
         s = self.state['stats']
-        obsession = self.state['internal']['current_obsession']
+        obsession = self.state['internal'].get('current_obsession', 'Unknown')
+        goal = self.state['internal'].get('current_goal', 'Survive') # <--- NEW: Goal Injection
         
         # 1. Determine Tone & Length Constraint
         style_instruction = ""
@@ -136,4 +149,5 @@ class OrmaPsyche:
         return f"""
         CURRENT MOOD: {style_instruction}
         CURRENT OBSESSION: {obsession}
+        CURRENT GOAL: {goal} -> Try to proactively steer the conversation towards this.
         """
