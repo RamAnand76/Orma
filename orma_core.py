@@ -189,24 +189,52 @@ class OrmaEngine:
         Extract facts from User Input as JSON triplets.
         [HISTORY] {history}
         [USER INPUT] {user_input}
+        
+        Return a JSON LIST of objects. Structure:
+        [
+            {{"source": "Subject", "relation": "Verb/Relation", "target": "Object"}}
+        ]
+        
         [RULES]
-        1. Resolve pronouns.
+        1. Resolve pronouns (I -> user, You -> Orma).
         2. If name is known '{self.user_alias}', use it as source.
-        Return ONLY JSON list.
+        3. IGNORE generic chit-chat. Only extract Facts.
+        4. Output ONLY valid JSON. No markdown.
         """
         try:
             result = self.llm_func(prompt, "")
-            match = re.search(r"\[.*\]", result, re.DOTALL)
+            
+            # Clean possible markdown code blocks
+            clean_result = result.replace("```json", "").replace("```", "").strip()
+            
+            match = re.search(r"\[.*\]", clean_result, re.DOTALL)
             if match:
                 triplets = json.loads(match.group(0))
+                parsed_count = 0
                 for t in triplets:
-                    if t['target'] in ["user", "orma"]: continue
-                    entry = self.ltm.add_triplet(t['source'], t['relation'], t['target'])
-                    if "name" in t['relation'] and t['source'] == "user":
-                        self.user_alias = t['target']
-                    logger.debug(f"Learned: {entry}")
-                    print(f"   💾 Learned: {entry}")
-                return len(triplets) > 0 # Return True if learned something
+                    s, r, obj = None, None, None
+                    
+                    # Handle Dict Format
+                    if isinstance(t, dict):
+                        s = t.get('source')
+                        r = t.get('relation')
+                        obj = t.get('target')
+                    # Handle List Format (Fallback)
+                    elif isinstance(t, list) and len(t) >= 3:
+                        s, r, obj = t[0], t[1], t[2]
+                        
+                    if s and r and obj:
+                        if obj.lower() in ["user", "orma"]: continue
+                        entry = self.ltm.add_triplet(s, r, obj)
+                        
+                        if "name" in r and s == "user":
+                            self.user_alias = obj
+                            
+                        logger.debug(f"Learned: {entry}")
+                        print(f"   💾 Learned: {entry}")
+                        parsed_count += 1
+                        
+                return parsed_count > 0
         except Exception as e:
-            logger.warning(f"Memory extraction failed: {e}")
+            logger.warning(f"Memory extraction failed: {e} | Raw: {result}")
         return False
