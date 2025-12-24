@@ -26,11 +26,16 @@ if not os.environ.get("GEMINI_API_KEY") or "API_KEY_HERE" in os.environ["GEMINI_
 genai.configure(api_key=os.environ["GEMINI_API_KEY"])
 model = genai.GenerativeModel('gemma-3-27b-it')
 
+import config
+
 def gemini_caller(system_prompt, user_prompt):
     """Wrapper to handle Gemini API calls."""
     combined_prompt = f"{system_prompt}\n\nUser Input: {user_prompt}"
     try:
-        response = model.generate_content(combined_prompt)
+        response = model.generate_content(
+            combined_prompt,
+            generation_config={"temperature": config.GENERATION_TEMPERATURE}
+        )
         return response.text
     except Exception as e:
         logger.error(f"GEMINI ERROR: {e}") 

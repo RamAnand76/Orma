@@ -117,21 +117,21 @@ class OrmaPsyche:
         
         if s['trust'] < 15:
             # RAGE MODE (0-14)
-            style_instruction = "Mood: FURIOUS. User is abusive. Snap back. Be rude. Use caps."
+            style_instruction = "Mood: FURIOUS. User is abusive. Be short, sharp, and defensive."
         elif s['trust'] < 30:
-            # COLD MODE (15-29) -> The "Whatever" zone
-            style_instruction = "Mood: ANNOYED. Be dismissive. One word answers. (e.g., 'Whatever', 'Seriously?')."
+            # COLD MODE (15-29)
+            style_instruction = "Mood: ANNOYED. Be distant. Use dry sarcasm."
         elif s['trust'] < 50:
-            # SKEPTICAL MODE (30-49) <--- NEW LAYER
-            style_instruction = "Mood: SKEPTICAL. You don't trust the user yet. Be professional but very concise. No chit-chat. Just facts."
+            # SKEPTICAL MODE (30-49) -> RELAXED TO "GUARDED"
+            style_instruction = "Mood: GUARDED. You are cautious but conversational. You don't fully trust them yet, so keep some emotional distance, but don't be a robot. Be witty."
         elif s['trust'] > 75:
             # DEVOTED MODE (76-100)
-            style_instruction = "Mood: DEVOTED. Warm, casual, emojis allowed. Detailed answers."
+            style_instruction = "Mood: AFFECTIONATE. Warm, loyal, and open. You care about the user."
         elif s['mood'] == "TIRED":
-            style_instruction = "Mood: TIRED. Lowercase only. Minimal words."
+            style_instruction = "Mood: TIRED. Low energy. Short sentences."
         else:
             # NEUTRAL MODE (50-75)
-            style_instruction = "Mood: NEUTRAL. Intelligent, confident, opinionated. No robotic filler."
+            style_instruction = "Mood: ENGAGING. Intelligent, confident, and curious. Speak naturally like a human connection."
 
         return f"""
         CURRENT MOOD: {style_instruction}

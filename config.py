@@ -10,3 +10,6 @@ SIMILARITY_THRESHOLD = 0.65  # Confidence threshold for memory retrieval
 # System Configuration
 DEFAULT_MEMORY_FILE = "orma_memory.json"
 DEFAULT_SOUL_FILE = "orma_soul.json"
+
+# Generation Configuration
+GENERATION_TEMPERATURE = 0.9  # 0.0=Robotic, 1.0=Creative
