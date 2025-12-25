@@ -106,8 +106,17 @@ class GraphMemory:
 
     def load(self):
         if os.path.exists(self.filepath):
-            try: self.graph = nx.node_link_graph(json.load(open(self.filepath)))
-            except Exception as e: logger.error(f"Failed to load memory: {e}")
+            try:
+                # Check for empty file
+                if os.path.getsize(self.filepath) == 0:
+                    logger.info("Memory file is empty. Starting fresh.")
+                    return
+
+                with open(self.filepath, 'r') as f:
+                    data = json.load(f)
+                    self.graph = nx.node_link_graph(data)
+            except Exception as e:
+                logger.warning(f"Could not load memory (starting fresh): {e}")
 
 class EpisodeMemory:
     def __init__(self, filepath=config.DEFAULT_EPISODE_FILE):

@@ -68,6 +68,9 @@ The development of Orma proceeded in five distinct phases:
 *   **Phase 3: Personality.** Tuned the LLM Temperature (0.9) and prompts to move from "Robotic/Skeptical" to "Guarded/Witty."
 *   **Phase 4: History.** Implemented Episodic Memory for cross-session continuity.
 *   **Phase 5: Agency.** Implemented Goals and Beliefs to give the agent its own agenda.
+*   **Phase 6: Autonomy.** Implemented a multi-threaded event loop for background processing (currently disabled for user preference).
+*   **Phase 7: Humanization.** Refined the persona to be casual, raw, and opinionated.
+*   **Phase 8: The Hands.** Implemented a ReAct Tool System (`tools/`), giving Orma the ability to search the web (DDGS), tell time, and calculate math.
 
 ## 5. Conclusion
 

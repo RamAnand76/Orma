@@ -1,0 +1,6 @@
+google-generativeai
+networkx
+sentence-transformers
+scikit-learn
+numpy
+ddgs
