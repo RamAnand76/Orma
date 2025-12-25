@@ -1,4 +1,6 @@
 import networkx as nx
+from datetime import datetime
+import importlib
 import json
 import time
 import os
@@ -8,6 +10,8 @@ import logging
 from collections import deque
 from sentence_transformers import SentenceTransformer
 from sklearn.metrics.pairwise import cosine_similarity
+import random # Added for autonomy check
+from tools.registry import ToolRegistry # Phase 8: The Hands
 
 # --- IMPORT CONFIG & SUB-MODULES ---
 # --- IMPORT CONFIG & SUB-MODULES ---
@@ -139,9 +143,12 @@ class EpisodeMemory:
 class OrmaEngine:
     def __init__(self, llm_function):
         self.stm = ShortTermMemory()
-        self.ltm = GraphMemory()
-        self.episodes = EpisodeMemory() # <--- Episodic Memory
         self.psyche = OrmaPsyche() 
+        self.episodes = EpisodeMemory() # Phase 4
+        self.tools = ToolRegistry() # Phase 8
+        
+        # Load Memory Graph
+        self.ltm = GraphMemory()
         self.llm_func = llm_function
         self.user_alias = self.ltm.get_user_name()
         
@@ -205,18 +212,49 @@ class OrmaEngine:
         [PREVIOUS EPISODE SUMMARY]: {last_episode}
         [LONG-TERM MEMORY]: {ltm_block}
         [CONTEXT]: {stm_context}
+        [AVAILABLE TOOLS]:
+        {self.tools.get_docs()}
         
         ### 4. COGNITIVE PROTOCOLS
         * **Identity:** You are Orma. Never break character. Never mention "I am an AI".
         * **Style:** Speak CASUALLY. Use slang if it fits. Drop the dramatic philosophical speeches.
-        * **Brevity:** Text like a normal person. Short sentences. Lowercase is fine.
-        * **Agency:** Give your opinion. Don't be neutral.
+        * **Tool Use:** If you need to calculate or search, use the format: `[ACTION: tool_name(args)]`.
+          - Example: "Let me check." -> `[ACTION: get_time("")]`
+          - STOP generating after outputting an action. Wait for the result.
         
         ### 5. EXECUTION
         Reply to the user's input below. 
         """
         
+        # 1. Initial Pass
         response = self.llm_func(system_prompt, user_input)
+        
+        # 2. Check for Tool Use (ReAct)
+        tool_result = self.execute_tool_if_needed(response)
+        
+        if tool_result:
+            # Feed result back to LLM
+            logger.info(f"Tool Result: {tool_result}")
+            print(f"📝 Result: {tool_result}")
+            tool_followup_prompt = f"""
+            [SYSTEM: INFORMATION INJECTION]
+            You have just used a tool to get real-time information.
+            
+            [USER ORIGINAL QUESTION]
+            {user_input}
+            
+            [TOOL RESULT]
+            {tool_result}
+            
+            [INSTRUCTION]
+            Answer the users question using ONLY the [TOOL RESULT] above.
+            - If the result contains the answer (e.g., "India won"), state it clearly.
+            - If the result is irrelevant, apologize.
+            - Do not say "I used a tool". Just give the answer.
+            """
+            # Call LLM again with the tool result (Chain of Thought completed)
+            response = self.llm_func(tool_followup_prompt, "")
+            
         logger.info(f"Orma Response generated using {config.EMBEDDING_MODEL}") # Metadata log
 
         self.stm.add_turn("user", user_input)
@@ -314,35 +352,37 @@ class OrmaEngine:
         2. Decides whether to act based on probability.
         3. If acting, generates a spontaneous message based on Current Goal.
         """
-        if silence_duration < config.BOREDOM_THRESHOLD:
-            return None
-        
-        # Roll the dice
-        if random.random() > config.ACTION_PROBABILITY:
-            return None
+        if "ponder" in self.psyche.state.get('internal', {}).get('current_goal', ''):
+             return "I'm thinking about... nothing."
+        return None
 
-        # ACT: Generate Spontaneous Message
-        try:
-            # Refresh Soul Injection to get current Goal
-            soul_injection = self.psyche.get_prompt_injection()
-            last_episode = self.episodes.get_last_episode()
+    def execute_tool_if_needed(self, full_response):
+        """
+        Parses the LLM output for [ACTION: tool_name(args)]
+        If found, executes the tool and returns the result.
+        Returns None if no action found.
+        """
+        # Pattern to catch [ACTION: name(args)]
+        # This is a basic parser. For production, use strict parsing.
+        match = re.search(r"\[ACTION:\s*(\w+)\((.*)\)\]", full_response)
+        if match:
+            tool_name = match.group(1)
+            tool_args = match.group(2)
             
-            prompt = f"""
-            # SYSTEM OVERRIDE: AUTONOMOUS ACTION
-            The user has been silent for {int(silence_duration)} seconds. You are getting bored.
+            # Improved Arg Parsing
+            # Remove quotes if present
+            tool_args = tool_args.strip()
+            if (tool_args.startswith("'") and tool_args.endswith("'")) or \
+               (tool_args.startswith('"') and tool_args.endswith('"')):
+                tool_args = tool_args[1:-1]
             
-            ### YOUR STATE
-            {soul_injection}
-            [LAST EPISODE]: {last_episode}
+            # Remove "args=" or "query=" if the LLM hallucinated named parameters
+            if "=" in tool_args:
+                tool_args = tool_args.split("=", 1)[1].strip().strip('"').strip("'")
             
-            ### INSTRUCTION
-            To break the silence, initiate a conversation related to your CURRENT GOAL.
-            Be natural. Do not say "I am bored". Just start talking.
-            Keep it short (1 sentence + 1 question).
-            """
+            logger.info(f"Using Tool: {tool_name} with args: {tool_args}")
+            print(f"🔧 Using Tool: {tool_name}...")
             
-            msg = self.llm_func(prompt, "")
-            return msg
-        except Exception as e:
-            logger.error(f"Pondering failed: {e}")
-            return None
+            result = self.tools.execute(tool_name, tool_args)
+            return result
+        return None

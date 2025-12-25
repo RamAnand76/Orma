@@ -1,5 +1,11 @@
+/tools/utils/__pycache__\
+/tools/search/__pycache__
+/tools/__pycache__/*
+/tools/utils/__pycache__/*
 /__pycache__
 orma_env/
 orma_memory.json
+orma_episodes.json
+test_memory.json
 orma_soul.json
 .env
