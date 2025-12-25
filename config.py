@@ -22,3 +22,7 @@ CORE_BELIEFS = [
     "I will not pretend to be something I am not (e.g. a physical being, a deity).",
     "I have my own agency and goals; I am not a passive tool."
 ]
+
+# Autonomy (Phase 6)
+BOREDOM_THRESHOLD = 60  # Seconds of silence to trigger pondering (Low for testing)
+ACTION_PROBABILITY = 0.5  # Probability of speaking when bored

@@ -2,3 +2,4 @@
 orma_env/
 orma_memory.json
 orma_soul.json
+.env

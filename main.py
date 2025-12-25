@@ -1,10 +1,14 @@
-import google.generativeai as genai
 import os
 import sys
+import time
 import logging
+import threading
+import queue
+import google.generativeai as genai
 from orma_core import OrmaEngine
+import config
 
-# --- 0. LOGGING SETUP ---
+# --- LOGGING SETUP ---
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s',
@@ -13,20 +17,18 @@ logging.basicConfig(
         logging.StreamHandler(sys.stdout)
     ]
 )
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("ORMA_MAIN")
 
-# --- 1. SETUP GEMINI ---
 # Replace with your actual key or ensure it's in your environment variables
 os.environ["GEMINI_API_KEY"] = "AIzaSyCx_FS0a0qR-umuI9Ge4lDMx0aqXq89nu8" 
 
-if not os.environ.get("GEMINI_API_KEY") or "API_KEY_HERE" in os.environ["GEMINI_API_KEY"]:
-    logger.error("Please set your Gemini API Key in line 23 of main.py")
-    sys.exit()
+# --- GEMINI SETUP ---
+if "GEMINI_API_KEY" not in os.environ:
+    logger.error("Error: GEMINI_API_KEY environment variable not set.")
+    sys.exit(1)
 
 genai.configure(api_key=os.environ["GEMINI_API_KEY"])
-model = genai.GenerativeModel('gemma-3-27b-it')
-
-import config
+model = genai.GenerativeModel('gemma-3-27b-it') # Using the requested model
 
 def gemini_caller(system_prompt, user_prompt):
     """Wrapper to handle Gemini API calls."""
@@ -41,48 +43,77 @@ def gemini_caller(system_prompt, user_prompt):
         logger.error(f"GEMINI ERROR: {e}") 
         return ""
 
-# --- 2. START ORMA ---
-# --- 2. START ORMA ---
-if __name__ == "__main__":
-    logger.info("Orma V5 (Soul Edition) Initializing...")
+# --- SHARED STATE ---
+input_queue = queue.Queue()
+running = True
+last_interaction_time = time.time()
+
+def input_listener():
+    """Thread 1: Listens for user input without blocking the main loop."""
+    global running
+    while running:
+        try:
+            # This is still blocking, but in a thread, so it doesn't freeze the brain
+            user_in = input() 
+            input_queue.put(user_in)
+        except EOFError:
+            running = False
+            break
+
+# --- MAIN LOOP ---
+def main():
+    global running, last_interaction_time
     
-    # Initialize Engine
-    engine = OrmaEngine(llm_function=gemini_caller)
+    logger.info("Orma V6 (Autonomous Edition) Initializing...")
+    engine = OrmaEngine(gemini_caller)
     
+    # 1. Start Input Thread
+    listener = threading.Thread(target=input_listener, daemon=True)
+    listener.start()
+
     # --- DIAGNOSTICS DASHBOARD ---
-    # We grab stats from the new Psyche module to show you the "Soul" state
     node_count = engine.ltm.graph.number_of_nodes()
     soul_stats = engine.psyche.state['stats']
-    current_obsession = engine.psyche.state['internal']['current_obsession']
+    current_goal = engine.psyche.state['internal'].get('current_goal', 'None')
     
     print("-" * 40)
     print(f"📂 Memory Nodes : {node_count}")
     print(f"❤️  Trust Level  : {soul_stats['trust']}/100")
     print(f"⚡ Energy Level : {soul_stats['energy']}/100")
     print(f"🎭 Current Mood : {soul_stats['mood']}")
-    print(f"🧐 Obsession    : {current_obsession}")
+    print(f"🎯 Current Goal : {current_goal}")
     print("-" * 40)
     
-    logger.info("System Ready.")
-    print("\n✅ System Ready. Say 'exit' to quit.")
-    
-    # --- 3. THE MAIN LOOP (This was missing!) ---
-    while True:
+    logger.info("System Ready. Spontaneous Mode: OFF (Event-Driven).")
+    print("\n✅ System Ready. Say 'exit' to quit. (I might speak first...)\n")
+    print("You: ", end="", flush=True) # Initial prompt
+
+    while running:
+        # A. Check for User Input (Non-blocking check)
         try:
-            user_in = input("\nYou: ")
+            user_in = input_queue.get_nowait() # Non-blocking get
+            
+            # --- PROCESS USER INPUT ---
             if user_in.lower() in ["exit", "quit"]: 
-                engine.consolidate_memory() # <--- NEW: Save Episode
-                engine.psyche.save() # Save soul state before leaving
+                print("\n🛑 Shutting down...")
+                engine.consolidate_memory() 
+                engine.psyche.save() 
+                running = False
                 break
             
-            # Process the input through Orma Engine
-            engine.process(user_in)
+            if user_in.strip():
+                # Process normally
+                response = engine.process(user_in)
+                print(f"\n🤖 Orma: {response}\n")
+                last_interaction_time = time.time() # Reset bored timer
+                print("You: ", end="", flush=True) # Reprompt
             
-        except KeyboardInterrupt:
-            print("\nForce stopping...")
-            break
-        except Exception as e:
-            logger.error(f"Runtime Error: {e}")
-            break
-            
+        except queue.Empty:
+            # B. User is Silent -> Just wait (Event Driven)
+            time.sleep(0.1) 
+            # Spontaneous Mode DISABLED per user request (Too robotic/philosophical)
+
     logger.info("Shutting down.")
+
+if __name__ == "__main__":
+    main()
