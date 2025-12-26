@@ -11,7 +11,13 @@ from collections import deque
 from sentence_transformers import SentenceTransformer
 from sklearn.metrics.pairwise import cosine_similarity
 import random # Added for autonomy check
+import random # Added for autonomy check
+from rich.console import Console
+from rich.status import Status
 from tools.registry import ToolRegistry # Phase 8: The Hands
+
+# Initialize Rich Console
+console = Console()
 
 # --- IMPORT CONFIG & SUB-MODULES ---
 # --- IMPORT CONFIG & SUB-MODULES ---
@@ -262,7 +268,19 @@ class OrmaEngine:
             - Do not say "I used a tool". Just give the answer.
             """
             # Call LLM again with the tool result (Chain of Thought completed)
-            response = self.llm_func(tool_followup_prompt, "")
+            # Call LLM again with the tool result (Chain of Thought completed)
+            # PHASE 9: The Mirror (Critic Loop)
+            # 1. Draft Answer
+            draft_response = self.llm_func(tool_followup_prompt, "")
+            
+            # 2. visual Feedback
+            with console.status("[bold yellow]⠋ Thinking... (Verifying facts)[/bold yellow]", spinner="dots"):
+                 # 3. The Judge
+                 response = self._evaluate_response(user_input, draft_response, tool_result)
+                 if response != draft_response:
+                     console.print("[bold green]✓ Correction Applied (Hallucination Prevented)[/bold green]")
+                 else:
+                     console.print("[bold green]✓ Verified[/bold green]")
             
         logger.info(f"Orma Response generated using {config.EMBEDDING_MODEL}") # Metadata log
 
@@ -273,8 +291,88 @@ class OrmaEngine:
         self.psyche.update_stats(user_input, learned_something)
         
         return response
+        return response
+
+    def _evaluate_response(self, question, draft_answer, evidence):
+        """
+        Phase 9: The Judge.
+        Compares draft answer against hard evidence.
+        Returns: draft_answer (if passed) OR corrected_answer (if failed).
+        """
+        judge_prompt = f"""
+        [SYSTEM: FACT VERIFICATION]
+        You are an impartial Judge. Verify if the Draft Answer is supported by the Evidence.
+        
+        [EVIDENCE]
+        {evidence}
+        
+        [DRAFT ANSWER]
+        {draft_answer}
+        
+        [TASK]
+        Does the Draft Answer directly contradict the Evidence?
+        - If YES (Contradiction): Output [REJECT]. Then write the CORRECT answer based ONLY on Evidence.
+        - If NO (Supported/Neutral): Output [PASS].
+        
+        Examples:
+        Evidence: "Brazil won." | Draft: "France won." -> [REJECT] Brazil won.
+        Evidence: "Brazil won." | Draft: "Brazil is the winner!" -> [PASS]
+        """
+        
+        verdict = self.llm_func(judge_prompt, "")
+        
+        if "[REJECT]" in verdict:
+            logger.warning(f"Hallucination caught by Judge. Correcting...")
+            # Extract correction (everything after [REJECT])
+            correction = verdict.split("[REJECT]")[1].strip()
+            return correction
+            
+        return draft_answer
 
     def _memorize(self, user_input, history):
+        prompt = f"""
+        Extract facts from User Input as JSON triplets.
+        [HISTORY] {history}
+        [USER INPUT] {user_input}
+        
+        Return a JSON LIST of objects. Structure:
+        [
+            {{"source": "Subject", "relation": "Verb/Relation", "target": "Object"}}
+        ]
+        
+        [RULES]
+        1. Resolve pronouns (I -> user, You -> Orma).
+        2. If name is known '{self.user_alias}', use it as source.
+        3. IGNORE generic chit-chat. Only extract Facts.
+        4. Output ONLY valid JSON. No markdown.
+        """
+        try:
+            result = self.llm_func(prompt, "")
+            
+            # Clean possible markdown code blocks
+            clean_result = result.replace("```json", "").replace("```", "").strip()
+            
+            match = re.search(r"\[.*\]", clean_result, re.DOTALL)
+            if match:
+                clean_result = match.group(0)
+            
+            data = json.loads(clean_result)
+            
+            # Robustness: Handle if LLM returns a single dict instead of list
+            if isinstance(data, dict): data = [data]
+            
+            learned_something = False
+            for item in data:
+                if "source" in item and "relation" in item and "target" in item:
+                    self.ltm.add_triplet(item['source'], item['relation'], item['target'])
+                    learned_something = True
+            
+            if learned_something: self.ltm.save()
+            return learned_something
+
+        except Exception as e:
+            logger.error(f"Memorize failed: {e}")
+            return False
         prompt = f"""
         Extract facts from User Input as JSON triplets.
         [HISTORY] {history}
