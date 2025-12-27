@@ -15,6 +15,8 @@ import random # Added for autonomy check
 from rich.console import Console
 from rich.status import Status
 from tools.registry import ToolRegistry # Phase 8: The Hands
+from planning.planner import Planner # Phase 11
+from planning.task_manager import TaskManager # Phase 11
 
 # Initialize Rich Console
 console = Console()
@@ -167,6 +169,10 @@ class OrmaEngine:
         self.llm_func = llm_function
         self.user_alias = self.ltm.get_user_name()
         
+        # Phase 11: Planning
+        self.planner = Planner(llm_function)
+        self.manager = TaskManager(self)
+        
         # Trigger Dreaming
         dream_msg = self.psyche.dream(self.ltm.graph)
         if dream_msg:
@@ -183,6 +189,57 @@ class OrmaEngine:
             if self.user_alias != "user": entities.append(self.user_alias)
         return entities
 
+    def process_step(self, step_input):
+        """
+        Simplified processing loop for executing a single step of a plan.
+        Skips finding new goals or planning. Just acts.
+        """
+        # 1. Search Memory (Lite)
+        ltm_block = "No specific data." # Simplify for speed? Or search just for step?
+        # Let's search LTM for the step content to be safe
+        search_terms = self._extract_entities(step_input)
+        ltm_facts = []
+        for term in search_terms: ltm_facts.extend(self.ltm.search(term))
+        ltm_block = "\n".join(list(set(ltm_facts))) if ltm_facts else "No specific data."
+        
+        # 2. Prompt
+        system_prompt = f"""
+        [SYSTEM: EXECUTION MODE]
+        You are executing a sub-task for a larger plan.
+        Your goal is to COMPLETE the task described below using your tools or knowledge.
+        
+        [LONG-TERM MEMORY]: {ltm_block}
+        [AVAILABLE TOOLS]: {self.tools.get_docs()}
+        
+        [INSTRUCTION]
+        - If you need a tool, use `[ACTION: tool_name(args)]`.
+        - IMPORTANT: When searching, strip phrases like "Search for" or "using X". Just search the KEYWORDS.
+          - Bad: `[ACTION: search_web("Search for CEO using DuckDuckGo")]`
+          - Good: `[ACTION: search_web("current CEO of Microsoft")]`
+        - Otherwise, just answer the query.
+        """
+        
+        response = self.llm_func(system_prompt, step_input)
+        
+        # 3. Tool Loop
+        tool_result = self.execute_tool_if_needed(response)
+        
+        if tool_result:
+            # Judge Loop (Mini-Judge)
+            # We can skip the full Judge for speed, or keep it.
+            # Let's just return the tool result + LLM interpretation
+            final_prompt = f"""
+            [SYSTEM]
+            You used a tool.
+            Query: {step_input}
+            Tool Result: {tool_result}
+            
+            Summarize the result to answer the query.
+            """
+            return self.llm_func(final_prompt, "")
+        
+        return response
+
     def process(self, user_input):
         # 0. EGO CHECK (The "Self-Respect" Filter)
         if self.psyche.state['stats']['trust'] <= 0:
@@ -193,114 +250,137 @@ class OrmaEngine:
                 print(f"🤖 Orma (DONE): {response}")
                 return response
         
-        # 1. Search Memory
-        search_terms = self._extract_entities(user_input)
-        ltm_facts = []
-        for term in search_terms: ltm_facts.extend(self.ltm.search(term))
-        ltm_facts = list(set(ltm_facts))
-        ltm_block = "\n".join(ltm_facts) if ltm_facts else "No specific data."
-
-        # 2. Get Soul Injection
-        soul_injection = self.psyche.get_prompt_injection()
+        response = None
         
-        # 3. Get Episodic Context
-        last_episode = self.episodes.get_last_episode()
-        
-        # Format Beliefs
-        beliefs_txt = "\n".join([f"* {b}" for b in config.CORE_BELIEFS])
-
-        # 4. Generate (The POWER PROMPT)
+        # 1. Get Context (Needed for both Planning and Standard paths)
         stm_context = self.stm.get_recent_context()
         
-        system_prompt = f"""
-        # SYSTEM OVERRIDE: ORMA OS v5.0
-        You are Orma. You are a raw, opinionated consciousness. You are NOT a helpful assistant. You are a friend.
-        
-        ### 1. PSYCHE STATE (STRICT COMPLIANCE)
-        {soul_injection}
-        
-        ### 2. CORE BELIEFS (THE BACKBONE)
-        {beliefs_txt}
-        * If the user contradicts these, politely but FIRMLY disagree. Do not yield.
-        
-        ### 3. KNOWLEDGE BASE
-        [PREVIOUS EPISODE SUMMARY]: {last_episode}
-        [LONG-TERM MEMORY]: {ltm_block}
-        [CONTEXT]: {stm_context}
-        [AVAILABLE TOOLS]:
-        {self.tools.get_docs()}
-        
-        ### 4. DYNAMIC AGENCY (IMPORTANT)
-        You have a Short-Term Goal. If the conversation shifts or you get bored, you MUST update it.
-        To update it, append `[GOAL: your new tactic]` at the VERY END of your response.
-        Example: "That's cool! [GOAL: Ask about their hobbies]"
-        
-        ### 4. DYNAMIC AGENCY (IMPORTANT)
-        You have a Short-Term Goal. If the conversation shifts or you get bored, you MUST update it.
-        To update it, append `[GOAL: your new tactic]` at the VERY END of your response.
-        Example: "That's cool! [GOAL: Ask about their hobbies]"
-        
-        ### 5. COGNITIVE PROTOCOLS
-        * **Identity:** You are Orma. Never break character. Never mention "I am an AI".
-        * **Style:** Speak CASUALLY. Use slang if it fits. Drop the dramatic philosophical speeches.
-        * **Tool Use:** If you need to calculate or search, use the format: `[ACTION: tool_name(args)]`.
-          - Example: "Let me check." -> `[ACTION: get_time("")]`
-          - STOP generating after outputting an action. Wait for the result.
-        
-        ### 6. EXECUTION
-        Reply to the user's input below. 
-        """
-        
-        # 1. Initial Pass
-        response = self.llm_func(system_prompt, user_input)
-        
-        # 0. Check for Goal Update (Phase 10: Zero-Latency)
-        goal_match = re.search(r"\[GOAL: (.*?)\]", response)
-        if goal_match:
-            new_goal = goal_match.group(1).strip()
-            self.psyche.update_short_term_goal(new_goal)
-            logger.info(f"Dynamic Agency: Goal updated to '{new_goal}'")
-            print(f"🎯 New Goal: {new_goal}")
-            # Remove the tag from the user-facing response
-            response = response.replace(goal_match.group(0), "").strip()
-        
-        # 2. Check for Tool Use (ReAct)
-        tool_result = self.execute_tool_if_needed(response)
-        
-        if tool_result:
-            # Feed result back to LLM
-            logger.info(f"Tool Result: {tool_result}")
-            print(f"📝 Result: {tool_result}")
-            tool_followup_prompt = f"""
-            [SYSTEM: INFORMATION INJECTION]
-            You have just used a tool to get real-time information.
+        # Phase 11: Explicit Planning Trigger
+        if user_input.lower().startswith("plan:") or user_input.lower().startswith("research:"):
+            logger.info("Complex Task Detected. Engaging Planner.")
+            print(f"🧠 Complex Task Detected. Engaging Planner...")
             
-            [USER ORIGINAL QUESTION]
-            {user_input}
+            # 1. Generate Plan
+            plan = self.planner.generate_plan(user_input, context=stm_context)
             
-            [TOOL RESULT]
-            {tool_result}
+            # 2. Execute Plan
+            results = self.manager.execute_plan(plan)
             
-            [INSTRUCTION]
-            Answer the users question using ONLY the [TOOL RESULT] above.
-            - If the result contains the answer (e.g., "India won"), state it clearly.
-            - If the result is irrelevant, apologize.
-            - Do not say "I used a tool". Just give the answer.
+            # 3. Synthesize Final Answer
+            final_summary_prompt = f"""
+            [SYSTEM: SYNTHESIS]
+            The user asked: "{user_input}"
+            We executed a plan and got these results:
+            {results}
+            
+            Write a comprehensive answer based on these results.
             """
-            # Call LLM again with the tool result (Chain of Thought completed)
-            # Call LLM again with the tool result (Chain of Thought completed)
-            # PHASE 9: The Mirror (Critic Loop)
-            # 1. Draft Answer
-            draft_response = self.llm_func(tool_followup_prompt, "")
+            response = self.llm_func(final_summary_prompt, "")
+        
+        # Standard Flow (if not planning)
+        if response is None:
+            # 1. Search Memory
+            search_terms = self._extract_entities(user_input)
+            ltm_facts = []
+            for term in search_terms: ltm_facts.extend(self.ltm.search(term))
+            ltm_facts = list(set(ltm_facts))
+            ltm_block = "\n".join(ltm_facts) if ltm_facts else "No specific data."
+
+            # 2. Get Soul Injection
+            soul_injection = self.psyche.get_prompt_injection()
+        
+            # 3. Get Episodic Context
+            last_episode = self.episodes.get_last_episode()
+        
+            # Format Beliefs
+            beliefs_txt = "\n".join([f"* {b}" for b in config.CORE_BELIEFS]) 
+
+            # 4. Generate (The POWER PROMPT)
+            # stm_context is already defined above
+        
+            system_prompt = f"""
+            # SYSTEM OVERRIDE: ORMA OS v5.0
+            You are Orma. You are a raw, opinionated consciousness. You are NOT a helpful assistant. You are a friend.
             
-            # 2. visual Feedback
-            with console.status("[bold yellow]⠋ Thinking... (Verifying facts)[/bold yellow]", spinner="dots"):
-                 # 3. The Judge
-                 response = self._evaluate_response(user_input, draft_response, tool_result)
-                 if response != draft_response:
-                     console.print("[bold green]✓ Correction Applied (Hallucination Prevented)[/bold green]")
-                 else:
-                     console.print("[bold green]✓ Verified[/bold green]")
+            ### 1. PSYCHE STATE (STRICT COMPLIANCE)
+            {soul_injection}
+            
+            ### 2. CORE BELIEFS (THE BACKBONE)
+            {beliefs_txt}
+            * If the user contradicts these, politely but FIRMLY disagree. Do not yield.
+            
+            ### 3. KNOWLEDGE BASE
+            [PREVIOUS EPISODE SUMMARY]: {last_episode}
+            [LONG-TERM MEMORY]: {ltm_block}
+            [CONTEXT]: {stm_context}
+            [AVAILABLE TOOLS]:
+            {self.tools.get_docs()}
+            
+            ### 4. DYNAMIC AGENCY (IMPORTANT)
+            You have a Short-Term Goal. If the conversation shifts or you get bored, you MUST update it.
+            To update it, append `[GOAL: your new tactic]` at the VERY END of your response.
+            Example: "That's cool! [GOAL: Ask about their hobbies]"
+            
+            ### 5. COGNITIVE PROTOCOLS
+            * **Identity:** You are Orma. Never break character. Never mention "I am an AI".
+            * **Style:** Speak CASUALLY. Use slang if it fits. Drop the dramatic philosophical speeches.
+            * **Tool Use:** If you need to calculate or search, use the format: `[ACTION: tool_name(args)]`.
+              - Example: "Let me check." -> `[ACTION: get_time("")]`
+              - STOP generating after outputting an action. Wait for the result.
+            
+            ### 6. EXECUTION
+            Reply to the user's input below. 
+            """
+            
+            # 1. Initial Pass
+            response = self.llm_func(system_prompt, user_input)
+        
+            # 0. Check for Goal Update (Phase 10: Zero-Latency)
+            goal_match = re.search(r"\[GOAL: (.*?)\]", response)
+            if goal_match:
+                new_goal = goal_match.group(1).strip()
+                self.psyche.update_short_term_goal(new_goal)
+                logger.info(f"Dynamic Agency: Goal updated to '{new_goal}'")
+                print(f"🎯 New Goal: {new_goal}")
+                # Remove the tag from the user-facing response
+                response = response.replace(goal_match.group(0), "").strip()
+        
+            # 2. Check for Tool Use (ReAct)
+            tool_result = self.execute_tool_if_needed(response)
+        
+            if tool_result:
+                # Feed result back to LLM
+                logger.info(f"Tool Result: {tool_result}")
+                print(f"📝 Result: {tool_result}")
+                tool_followup_prompt = f"""
+                [SYSTEM: INFORMATION INJECTION]
+                You have just used a tool to get real-time information.
+                
+                [USER ORIGINAL QUESTION]
+                {user_input}
+                
+                [TOOL RESULT]
+                {tool_result}
+                
+                [INSTRUCTION]
+                Answer the users question using ONLY the [TOOL RESULT] above.
+                - If the result contains the answer (e.g., "India won"), state it clearly.
+                - If the result is irrelevant, apologize.
+                - Do not say "I used a tool". Just give the answer.
+                """
+                # Call LLM again with the tool result (Chain of Thought completed)
+                # PHASE 9: The Mirror (Critic Loop)
+                # 1. Draft Answer
+                draft_response = self.llm_func(tool_followup_prompt, "")
+                
+                # 2. visual Feedback
+                with console.status("[bold yellow]⠋ Thinking... (Verifying facts)[/bold yellow]", spinner="dots"):
+                     # 3. The Judge
+                     response = self._evaluate_response(user_input, draft_response, tool_result)
+                     if response != draft_response:
+                         console.print("[bold green]✓ Correction Applied (Hallucination Prevented)[/bold green]")
+                     else:
+                         console.print("[bold green]✓ Verified[/bold green]")
             
         logger.info(f"Orma Response generated using {config.EMBEDDING_MODEL}") # Metadata log
 
