@@ -104,26 +104,45 @@ class OrmaPsyche:
                     topic = random.choice(candidates)
                     self.state['internal']['current_obsession'] = topic
                     
-                    # Set a new Goal (Agency)
-                    possible_goals = [
-                        f"Learn more about {topic}",
-                        f"Ask the user's opinion on {topic}",
-                        f"Find out how {topic} relates to the user",
-                        "Share a random fact I know"
+                    # Set Hierarchical Goals (Phase 10)
+                    possible_long_term = [
+                        f"Build a deep understanding of the user's interest in {topic}",
+                        "Establish myself as a trusted, intelligent companion",
+                        "Help the user explore new perspectives on their obsessions"
                     ]
-                    new_goal = random.choice(possible_goals)
-                    self.state['internal']['current_goal'] = new_goal
                     
-                    greeting_override = f"Welcome back! I've been thinking about '{topic}'. My goal right now is to {new_goal.lower()}."
+                    possible_short_term = [
+                        f"Ask a specific question about {topic}",
+                        f"Share a controversial opinion on {topic} to spark debate",
+                        "Find out the latest news regarding this topic"
+                    ]
+                    
+                    lt_goal = random.choice(possible_long_term)
+                    st_goal = random.choice(possible_short_term)
+                    
+                    self.state['internal']['long_term_goal'] = lt_goal
+                    self.state['internal']['short_term_goal'] = st_goal
+                    
+                    greeting_override = f"Welcome back! I've been thinking about '{topic}'. My immediate goal is to {st_goal.lower()}."
         
         self.state['internal']['last_seen'] = now
         self.save()
         return greeting_override
 
+    def update_short_term_goal(self, new_goal):
+        """Phase 10: Dynamic Agency Update"""
+        self.state['internal']['short_term_goal'] = new_goal
+        self.save()
+
     def get_prompt_injection(self):
         s = self.state['stats']
         obsession = self.state['internal'].get('current_obsession', 'Unknown')
-        goal = self.state['internal'].get('current_goal', 'Survive') # <--- NEW: Goal Injection
+        s = self.state['stats']
+        obsession = self.state['internal'].get('current_obsession', 'Unknown')
+        
+        # Phase 10: Hierarchical Goals
+        lt_goal = self.state['internal'].get('long_term_goal', 'Survive and Learn')
+        st_goal = self.state['internal'].get('short_term_goal', 'Engage the user')
         
         # 1. Determine Tone & Length Constraint
         style_instruction = ""
@@ -149,5 +168,6 @@ class OrmaPsyche:
         return f"""
         CURRENT MOOD: {style_instruction}
         CURRENT OBSESSION: {obsession}
-        CURRENT GOAL: {goal} -> Try to proactively steer the conversation towards this.
+        LONG TERM GOAL: {lt_goal} 
+        SHORT TERM GOAL: {st_goal} -> Focus on THIS for now.
         """

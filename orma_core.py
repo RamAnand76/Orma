@@ -230,19 +230,39 @@ class OrmaEngine:
         [AVAILABLE TOOLS]:
         {self.tools.get_docs()}
         
-        ### 4. COGNITIVE PROTOCOLS
+        ### 4. DYNAMIC AGENCY (IMPORTANT)
+        You have a Short-Term Goal. If the conversation shifts or you get bored, you MUST update it.
+        To update it, append `[GOAL: your new tactic]` at the VERY END of your response.
+        Example: "That's cool! [GOAL: Ask about their hobbies]"
+        
+        ### 4. DYNAMIC AGENCY (IMPORTANT)
+        You have a Short-Term Goal. If the conversation shifts or you get bored, you MUST update it.
+        To update it, append `[GOAL: your new tactic]` at the VERY END of your response.
+        Example: "That's cool! [GOAL: Ask about their hobbies]"
+        
+        ### 5. COGNITIVE PROTOCOLS
         * **Identity:** You are Orma. Never break character. Never mention "I am an AI".
         * **Style:** Speak CASUALLY. Use slang if it fits. Drop the dramatic philosophical speeches.
         * **Tool Use:** If you need to calculate or search, use the format: `[ACTION: tool_name(args)]`.
           - Example: "Let me check." -> `[ACTION: get_time("")]`
           - STOP generating after outputting an action. Wait for the result.
         
-        ### 5. EXECUTION
+        ### 6. EXECUTION
         Reply to the user's input below. 
         """
         
         # 1. Initial Pass
         response = self.llm_func(system_prompt, user_input)
+        
+        # 0. Check for Goal Update (Phase 10: Zero-Latency)
+        goal_match = re.search(r"\[GOAL: (.*?)\]", response)
+        if goal_match:
+            new_goal = goal_match.group(1).strip()
+            self.psyche.update_short_term_goal(new_goal)
+            logger.info(f"Dynamic Agency: Goal updated to '{new_goal}'")
+            print(f"🎯 New Goal: {new_goal}")
+            # Remove the tag from the user-facing response
+            response = response.replace(goal_match.group(0), "").strip()
         
         # 2. Check for Tool Use (ReAct)
         tool_result = self.execute_tool_if_needed(response)
