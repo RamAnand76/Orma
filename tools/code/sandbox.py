@@ -72,7 +72,20 @@ class CodeSandbox:
 # Tool wrapper for the registry
 class PythonTool:
     name = "run_python"
-    description = "Execute Python code to solve math problems, analyze data, or perform calculations. Input: valid Python code as a string."
+    description = """Execute Python code.
+- Supported: standard math, lists, loops, imports (math, random, datetime).
+- NOT Supported: file I/O, networking, infinite loops.
+- Input: Valid Python code string. Multi-line code is allowed.
+Examples:
+- Power: run_python("print(2**100)")
+- Fibonacci: 
+run_python(\"\"\"
+def fib(n):
+    a,b = 0,1
+    for _ in range(n): a,b = b, a+b
+    return a
+print(fib(50))
+\"\"\")"""
     
     def __init__(self):
         self.sandbox = CodeSandbox()

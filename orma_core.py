@@ -571,7 +571,8 @@ class OrmaEngine:
         """
         # Pattern to catch [ACTION: name(args)]
         # This is a basic parser. For production, use strict parsing.
-        match = re.search(r"\[ACTION:\s*(\w+)\((.*)\)\]", full_response)
+        # Added re.DOTALL to support multi-line arguments (like Python code)
+        match = re.search(r"\[ACTION:\s*(\w+)\((.*?)\)\]", full_response, re.DOTALL)
         if match:
             tool_name = match.group(1)
             tool_args = match.group(2)
@@ -584,8 +585,11 @@ class OrmaEngine:
                 tool_args = tool_args[1:-1]
             
             # Remove "args=" or "query=" if the LLM hallucinated named parameters
-            if "=" in tool_args:
-                tool_args = tool_args.split("=", 1)[1].strip().strip('"').strip("'")
+            # BUT: Skip this for code tools where '=' is valid syntax (e.g. variable assignment)
+            if "=" in tool_args and tool_name != "run_python":
+                # Only split if it looks like a named arg (simple heuristic)
+                if tool_args.startswith("args=") or tool_args.startswith("query="):
+                    tool_args = tool_args.split("=", 1)[1].strip().strip('"').strip("'")
             
             logger.info(f"Using Tool: {tool_name} with args: {tool_args}")
             print(f"🔧 Using Tool: {tool_name}...")
