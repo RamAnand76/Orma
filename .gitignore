@@ -9,3 +9,8 @@ orma_episodes.json
 test_memory.json
 orma_soul.json
 .env
+
+orma.log
+test_phase2.py 
+planner.*
+task_manager.*
