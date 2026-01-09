@@ -1,8 +1,8 @@
 # 🗺️ The Orma AGI Roadmap
 
-**Current Status:** Level 3 (Competent Agent)
-**Version:** Orma OS v6.0 (Autonomous Edition)
-**Date:** December 2025
+**Current Status:** Level 4 (Expert Agent) 🟢
+**Version:** Orma OS v7.0 (The Engineer)
+**Date:** January 2026
 
 ---
 
@@ -21,31 +21,29 @@
 *   **Phase 6: The Autonomous Loop:** The "Dreaming" system. Orma simulates thoughts and updates its state when the user is away.
 *   **Phase 7: True Humanization:** Refining the output style to be raw, opinionated, and unpredictable.
 
-### Level 3: The Competent Agent (Proto-AGI) 📍 **[WE ARE HERE]**
+### Level 3: The Competent Agent (Proto-AGI)
 *The AI gains hands, eyes, and self-awareness. It can act on the world.*
 *   **Phase 8: The Hands (Tool Use):** Integration of Web Search (`ddgs`) and System Tools. Orma can research real-time facts.
 *   **Phase 9: The Mirror (Metacognition):** The "Critic Loop". Orma critiques its own draft answers against evidence to prevent hallucinations.
     *   *Feature:* `⠋ Thinking...` Visual Feedback.
 *   **Phase 10: Hierarchical Agency:** Split Goals (Long-Term vs Short-Term). Orma dynamically changes its immediate tactics (Zero-Latency) based on boredom or context tags (`[GOAL: ...]`).
 
+### Level 4: The Expert Agent (Recursion & Expansion) 📍 **[WE ARE HERE]**
+*The AI becomes a capable worker that can handle long-horizon tasks and solve problems.*
+*   **Phase 11: Recursive Planning:** Ability to break a complex goal ("Research X then Y") into a DAG of tasks and execute them autonomously.
+*   **Phase 12: Code Autonomy (The Engineer):** Orma can write, execute, and fix its own Python code in a secure sandbox `tools/code/sandbox.py`. It uses this for math, logic, and data processing.
+
 ---
 
-## 🟡 THE NEXT FRONTIER (Road to Level 4)
+## 🟡 THE NEXT FRONTIER (Road to Level 5)
 
-### Level 4: The Expert Agent (Recursion & Expansion)
-*The AI becomes a capable worker that can handle long-horizon tasks.*
+### Phase 13: Local AI (The Brain)
+*   **Concept:** True independence. Running the "Brain" (LLM) locally on the user's hardware so Orma works offline.
+*   **Tech:** `llama-cpp-python`, local GGUF models.
 
-#### Phase 11: Recursive Planning
-*   **Concept:** Ability to break a vague goal ("Research the history of AI") into a 10-step plan and execute it autonomously over multiple turns.
-*   **Tech:** Directed Acyclic Graph (DAG) for task management.
-
-#### Phase 12: Code Autonomy (Self-Correction)
-*   **Concept:** Orma gains the ability to write, run, and *fix* its own Python scripts in a sandboxed environment.
-*   **Tech:** secure `exec()` sandbox, containerization (Docker).
-
-#### Phase 13: Multi-Modal Perception
+### Phase 14: Multi-Modal Perception
 *   **Concept:** "Eyes and Ears". Giving Orma the ability to see images (Vision) and hear audio (STT).
-*   **Tech:** Integrating `Gemini-Pro-Vision` and `Whisper`.
+*   **Tech:** Integrating Vision APIs or local Vision models.
 
 ---
 
@@ -54,8 +52,8 @@
 ### Level 5: Superintelligence (Novelty)
 *The AI creates new knowledge.*
 
-#### Phase 14: The Scientist
+#### Phase 15: The Scientist
 *   **Concept:** Hypothesis generation and testing. Orma runs experiments (code or search) to answer questions that have no Googleable answer.
 
-#### Phase 15: Continuous Learning (The Soul Forge)
+#### Phase 16: Continuous Learning (The Soul Forge)
 *   **Concept:** Fine-tuning its own weights/system prompts based on months of interaction. True conceptual evolution.
