@@ -2,6 +2,7 @@
 /tools/search/__pycache__
 /tools/__pycache__/*
 /tools/utils/__pycache__/*
+/tools/code/__pycache__/*
 /__pycache__
 orma_env/
 orma_memory.json
@@ -14,3 +15,4 @@ orma.log
 test_phase2.py 
 planner.*
 task_manager.*
+
