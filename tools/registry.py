@@ -2,7 +2,8 @@ from typing import Dict, Type
 from .base import BaseTool
 from .utils.basic import TimeTool, CalculatorTool
 from .search.ddgs_tool import DdgsTool
-from .code.sandbox import PythonTool  # Phase 12: Code Autonomy
+from .code.sandbox import PythonTool
+from .system.vision import VisionTool # Phase 14: Vision
 
 class ToolRegistry:
     def __init__(self):
@@ -13,7 +14,8 @@ class ToolRegistry:
         self.register(TimeTool())
         self.register(CalculatorTool())
         self.register(DdgsTool())
-        self.register(PythonTool())  # Phase 12: The Engineer
+        self.register(PythonTool())
+        self.register(VisionTool()) # Phase 14: Vision
         
     def register(self, tool: BaseTool):
         self._tools[tool.name] = tool
