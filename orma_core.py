@@ -3,6 +3,7 @@ from datetime import datetime
 import importlib
 import json
 import time
+import concurrent.futures # Phase 13: For LLM timeouts
 import os
 import re
 import numpy as np
@@ -17,6 +18,7 @@ from rich.status import Status
 from tools.registry import ToolRegistry # Phase 8: The Hands
 from planning.planner import Planner # Phase 11
 from planning.task_manager import TaskManager # Phase 11
+from planning.local_llm import LocalLLM # Phase 13: Local Brain # Phase 11
 
 # Initialize Rich Console
 console = Console()
@@ -166,11 +168,14 @@ class OrmaEngine:
         
         # Load Memory Graph
         self.ltm = GraphMemory()
-        self.llm_func = llm_function
+        self.cloud_llm = llm_function  # Phase 13: Rename to cloud_llm
         self.user_alias = self.ltm.get_user_name()
         
-        # Phase 11: Planning
-        self.planner = Planner(llm_function)
+        # Phase 13: Local Brain (Lazy Init)
+        self.local_brain = LocalLLM()
+        
+        # Phase 11: Planning (Using the wrapper method for Fallback)
+        self.planner = Planner(self.llm_func)
         self.manager = TaskManager(self)
         
         # Trigger Dreaming
@@ -178,6 +183,25 @@ class OrmaEngine:
         if dream_msg:
             logger.info(f"Orma Wakes Up: {dream_msg}")
             print(f"\n💤 Orma Wakes Up: {dream_msg}\n")
+
+    def llm_func(self, system_prompt, user_input):
+        """
+        Phase 13: The Hybrid Brain.
+        Tries Cloud (Gemini) first with strict timeout. Falls back to Local (Phi-3) if failed.
+        """
+        try:
+            # Use ThreadPool to enforce timeout on blocking API call
+            with concurrent.futures.ThreadPoolExecutor() as executor:
+                future = executor.submit(self.cloud_llm, system_prompt, user_input)
+                return future.result(timeout=config.LLM_TIMEOUT)
+        except concurrent.futures.TimeoutError:
+             logger.warning(f"Cloud Brain Timeout ({config.LLM_TIMEOUT}s). Switching to Local.")
+             print(f"\n⏳ Cloud Brain Unresponsive. Switching to Local Brain... 🧠")
+             return self.local_brain.generate(system_prompt, user_input)
+        except Exception as e:
+            logger.warning(f"Cloud Brain Failed: {e}. Switching to Local.")
+            print(f"\n⚠️  Cloud Breakdown. Switching to Local Brain... 🧠")
+            return self.local_brain.generate(system_prompt, user_input)
 
     def _extract_entities(self, text):
         prompt = f"Extract main entities (Subject, Object) from: '{text}'. Return comma-separated list."

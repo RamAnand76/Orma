@@ -14,6 +14,15 @@ DEFAULT_EPISODE_FILE = "orma_episodes.json"
 
 # Generation Configuration
 GENERATION_TEMPERATURE = 0.9  # 0.0=Robotic, 1.0=Creative
+LLM_TIMEOUT = 10  # Seconds to wait for Cloud API before falling back to Local
+
+# Local Brain Configuration (Phase 13)
+LOCAL_MODEL_PATH = r"C:\Users\LENOVO\Desktop\Qwen3-0.6B-Q8_0.gguf"
+LOCAL_MODEL_PARAMS = {
+    "n_ctx": 4096,      # Context window
+    "n_gpu_layers": 35, # Offload to GPU if available (0 for CPU only)
+    "verbose": False
+}
 
 # Alignment (The Backbone)
 CORE_BELIEFS = [
