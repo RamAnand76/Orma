@@ -20,8 +20,7 @@ logging.basicConfig(
 logger = logging.getLogger("ORMA_MAIN")
 
 # Replace with your actual key or ensure it's in your environment variables
-os.environ["GEMINI_API_KEY"] = "AIzaSyCx_FS0a0qR-umuI9Ge4lDMx0aqXq89nu8" 
-
+os.environ["GEMINI_API_KEY"] = "API-Key"
 # --- GEMINI SETUP ---
 if "GEMINI_API_KEY" not in os.environ:
     logger.error("Error: GEMINI_API_KEY environment variable not set.")
