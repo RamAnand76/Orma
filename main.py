@@ -86,6 +86,17 @@ def llm_caller(system_prompt, user_prompt):
             logger.error(f"LLM Error on {current_model}: {e}")
             if ENABLE_MODEL_ROTATION: rotation_index += 1
 
+    # --- EMERGENCY FALLBACK ---
+    if gemini_key:
+        try:
+            logger.warning("All rotation models failed. Falling back to Native Gemini...")
+            fallback_model = genai.GenerativeModel("gemma-3-27b-it")
+            response = fallback_model.generate_content(combined_prompt, generation_config={"temperature": config.GENERATION_TEMPERATURE})
+            if response.text:
+                return response.text
+        except Exception as e:
+            logger.error(f"EMERGENCY FALLBACK FAILED: {e}")
+
     return ""
 
 # --- SHARED STATE ---
