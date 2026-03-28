@@ -7,3 +7,4 @@ ddgs
 rich
 python-dotenv
 requests
+Pillow

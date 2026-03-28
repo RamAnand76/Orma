@@ -41,59 +41,71 @@ def llm_caller(system_prompt, user_prompt):
     """Wrapper to handle LLM API calls with circular model switching."""
     global rotation_index
     
-    current_model = ROTATION_MODELS[rotation_index % len(ROTATION_MODELS)]
-    logger.info(f"Using model: {current_model} (Rotation Index: {rotation_index})")
-    
     combined_prompt = f"{system_prompt}\n\nUser Input: {user_prompt}"
     
-    try:
-        # OPENROUTER LOGIC
-        if "/" in current_model or openrouter_key:
-            if not openrouter_key:
-                logger.error("Error: OPENROUTER_API_KEY environment variable not set but an OpenRouter model was requested.")
-                return ""
-                
-            headers = {
-                "Authorization": f"Bearer {openrouter_key}",
-                "Content-Type": "application/json"
-            }
-            data = {
-                "model": current_model,
-                "messages": [
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt}
-                ],
-                "temperature": config.GENERATION_TEMPERATURE
-            }
-            response = requests.post("https://openrouter.ai/api/v1/chat/completions", headers=headers, json=data)
-            
-            if response.status_code == 200:
-                result_text = response.json()['choices'][0]['message']['content']
-            else:
-                logger.error(f"OpenRouter API Error {response.status_code}: {response.text}")
-                result_text = ""
-                
-        # FALLBACK GEMINI NATIVE LOGIC
-        else:
-            if not gemini_key:
-                logger.error("Error: GEMINI_API_KEY environment variable not set.")
-                return ""
-            model = genai.GenerativeModel(current_model)
-            response = model.generate_content(
-                combined_prompt,
-                generation_config={"temperature": config.GENERATION_TEMPERATURE}
-            )
-            result_text = response.text
-            
-        # Increment index for circular switching if rotation is enabled
-        if ENABLE_MODEL_ROTATION:
-            rotation_index += 1
-            
-        return result_text
+    max_attempts = len(ROTATION_MODELS)
+    
+    for attempt in range(max_attempts):
+        current_model = ROTATION_MODELS[rotation_index % len(ROTATION_MODELS)]
+        logger.info(f"Using model: {current_model} (Rotation Index: {rotation_index})")
         
-    except Exception as e:
-        logger.error(f"LLM CALL ERROR: {e}") 
-        return ""
+        try:
+            result_text = ""
+            # OPENROUTER LOGIC
+            if "/" in current_model or openrouter_key:
+                if not openrouter_key:
+                    logger.error("Error: OPENROUTER_API_KEY environment variable not set.")
+                    return ""
+                    
+                headers = {
+                    "Authorization": f"Bearer {openrouter_key}",
+                    "Content-Type": "application/json"
+                }
+                data = {
+                    "model": current_model,
+                    "messages": [
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": user_prompt}
+                    ],
+                    "temperature": config.GENERATION_TEMPERATURE
+                }
+                response = requests.post("https://openrouter.ai/api/v1/chat/completions", headers=headers, json=data)
+                
+                if response.status_code == 200:
+                    result_text = response.json()['choices'][0]['message']['content']
+                else:
+                    logger.error(f"OpenRouter API Error {response.status_code}: {response.text}")
+                    result_text = ""
+                    
+            # FALLBACK GEMINI NATIVE LOGIC
+            else:
+                if not gemini_key:
+                    logger.error("Error: GEMINI_API_KEY environment variable not set.")
+                    return ""
+                model = genai.GenerativeModel(current_model)
+                response = model.generate_content(
+                    combined_prompt,
+                    generation_config={"temperature": config.GENERATION_TEMPERATURE}
+                )
+                result_text = response.text
+                
+            # If successful, increment for next time and return
+            if result_text:
+                if ENABLE_MODEL_ROTATION:
+                    rotation_index += 1
+                return result_text
+            else:
+                logger.warning(f"Model {current_model} failed (empty/error). Auto-falling back to next model...")
+                if ENABLE_MODEL_ROTATION:
+                    rotation_index += 1
+                
+        except Exception as e:
+            logger.error(f"LLM CALL ERROR on {current_model}: {e}") 
+            if ENABLE_MODEL_ROTATION:
+                rotation_index += 1
+
+    logger.error("All models in the rotation failed. Rate limits might be exhausted.")
+    return ""
 
 # --- SHARED STATE ---
 input_queue = queue.Queue()
