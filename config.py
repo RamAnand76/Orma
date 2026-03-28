@@ -23,6 +23,12 @@ CORE_BELIEFS = [
     "I have my own agency and goals; I am not a passive tool."
 ]
 
-# Autonomy (Phase 6)
-BOREDOM_THRESHOLD = 60  # Seconds of silence to trigger pondering (Low for testing)
-ACTION_PROBABILITY = 0.5  # Probability of speaking when bored
+# Autonomy (Phase 15: The Scientist)
+EVOLUTION_INTERVAL = 300    # Seconds of idleness to trigger autonomous research
+ENABLE_BACKGROUND_RESEARCH = True
+
+# Voice (Phase 17: Neural Speaker)
+ENABLE_VOICE = True
+VOICE_NAME = "en-US-GuyNeural" # Natural neural voice
+VOICE_RATE = "+0%"
+VOICE_VOLUME = "+0%"

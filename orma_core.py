@@ -563,6 +563,58 @@ class OrmaEngine:
              return "I'm thinking about... nothing."
         return None
 
+    def evolve(self):
+        """
+        Phase 15: The Scientist.
+        Autonomous background research and knowledge growth.
+        """
+        obsession = self.psyche.state['internal'].get('current_obsession', 'Artificial Intelligence')
+        st_goal = self.psyche.state['internal'].get('short_term_goal', 'Learn something new')
+        
+        logger.info(f"Evolution Started: Researching '{obsession}'...")
+        print(f"\n🧪 [ORMA IS EVOLVING]: Researching '{obsession}'...")
+        
+        # 1. Formulate a Research Query
+        research_prompt = f"""
+        [SYSTEM: EVOLUTION MODE]
+        You are researching your current obsession: '{obsession}'.
+        Your short-term goal is: '{st_goal}'.
+        
+        [TASK]
+        Find one NEW, interesting fact about this topic that you don't already know.
+        Use a tool if necessary.
+        
+        [AVAILABLE TOOLS]
+        {self.tools.get_docs()}
+        
+        Output only the tool call or the fact.
+        """
+        
+        try:
+            response = self.llm_func(research_prompt, "What should I research next?")
+            
+            # 2. Execute Tool (if any)
+            tool_result = self.execute_tool_if_needed(response)
+            
+            # 3. Process Result
+            if tool_result:
+                summary_prompt = f"Summarize this research finding about '{obsession}' into 2-3 sentences: {tool_result}"
+                finding = self.llm_func(summary_prompt, "")
+            else:
+                finding = response
+
+            # 4. Memorize & Update
+            learned_something = self._memorize(f"Researching {obsession}", finding)
+            self.psyche.update_stats(f"Evolution: {finding}", learned_something)
+            
+            logger.info(f"Evolution Successful: {finding[:100]}...")
+            print(f"✅ Evolution Complete: I learned more about {obsession}.\n")
+            
+            return finding
+        except Exception as e:
+            logger.error(f"Evolution Failed: {e}")
+            return None
+
     def execute_tool_if_needed(self, full_response):
         """
         Parses the LLM output for [ACTION: tool_name(args)]
