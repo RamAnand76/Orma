@@ -4,7 +4,10 @@ import time
 import logging
 import threading
 import queue
+import json
+import requests
 import google.generativeai as genai
+from dotenv import load_dotenv
 from orma_core import OrmaEngine
 import config
 
@@ -19,27 +22,77 @@ logging.basicConfig(
 )
 logger = logging.getLogger("ORMA_MAIN")
 
-# Replace with your actual key or ensure it's in your environment variables
-os.environ["GEMINI_API_KEY"] = "API-Key"
-# --- GEMINI SETUP ---
-if "GEMINI_API_KEY" not in os.environ:
-    logger.error("Error: GEMINI_API_KEY environment variable not set.")
-    sys.exit(1)
+# Load configuration from .env
+load_dotenv()
 
-genai.configure(api_key=os.environ["GEMINI_API_KEY"])
-model = genai.GenerativeModel('gemma-3-27b-it') # Using the requested model
+# --- GEMINI / OPENROUTER SETUP ---
+gemini_key = os.environ.get("GEMINI_API_KEY")
+openrouter_key = os.environ.get("OPENROUTER_API_KEY")
 
-def gemini_caller(system_prompt, user_prompt):
-    """Wrapper to handle Gemini API calls."""
+if gemini_key:
+    genai.configure(api_key=gemini_key)
+
+# Global rotation state
+ENABLE_MODEL_ROTATION = os.environ.get("ENABLE_MODEL_ROTATION", "False").lower() == "true"
+ROTATION_MODELS = [m.strip() for m in os.environ.get("ROTATION_MODELS", "google/gemma-3-27b-it:free").split(',')] if ENABLE_MODEL_ROTATION else ['gemma-3-27b-it']
+rotation_index = 0
+
+def llm_caller(system_prompt, user_prompt):
+    """Wrapper to handle LLM API calls with circular model switching."""
+    global rotation_index
+    
+    current_model = ROTATION_MODELS[rotation_index % len(ROTATION_MODELS)]
+    logger.info(f"Using model: {current_model} (Rotation Index: {rotation_index})")
+    
     combined_prompt = f"{system_prompt}\n\nUser Input: {user_prompt}"
+    
     try:
-        response = model.generate_content(
-            combined_prompt,
-            generation_config={"temperature": config.GENERATION_TEMPERATURE}
-        )
-        return response.text
+        # OPENROUTER LOGIC
+        if "/" in current_model or openrouter_key:
+            if not openrouter_key:
+                logger.error("Error: OPENROUTER_API_KEY environment variable not set but an OpenRouter model was requested.")
+                return ""
+                
+            headers = {
+                "Authorization": f"Bearer {openrouter_key}",
+                "Content-Type": "application/json"
+            }
+            data = {
+                "model": current_model,
+                "messages": [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt}
+                ],
+                "temperature": config.GENERATION_TEMPERATURE
+            }
+            response = requests.post("https://openrouter.ai/api/v1/chat/completions", headers=headers, json=data)
+            
+            if response.status_code == 200:
+                result_text = response.json()['choices'][0]['message']['content']
+            else:
+                logger.error(f"OpenRouter API Error {response.status_code}: {response.text}")
+                result_text = ""
+                
+        # FALLBACK GEMINI NATIVE LOGIC
+        else:
+            if not gemini_key:
+                logger.error("Error: GEMINI_API_KEY environment variable not set.")
+                return ""
+            model = genai.GenerativeModel(current_model)
+            response = model.generate_content(
+                combined_prompt,
+                generation_config={"temperature": config.GENERATION_TEMPERATURE}
+            )
+            result_text = response.text
+            
+        # Increment index for circular switching if rotation is enabled
+        if ENABLE_MODEL_ROTATION:
+            rotation_index += 1
+            
+        return result_text
+        
     except Exception as e:
-        logger.error(f"GEMINI ERROR: {e}") 
+        logger.error(f"LLM CALL ERROR: {e}") 
         return ""
 
 # --- SHARED STATE ---
@@ -64,7 +117,7 @@ def main():
     global running, last_interaction_time
     
     logger.info("Orma V6 (Autonomous Edition) Initializing...")
-    engine = OrmaEngine(gemini_caller)
+    engine = OrmaEngine(llm_caller)
     
     # 1. Start Input Thread
     listener = threading.Thread(target=input_listener, daemon=True)

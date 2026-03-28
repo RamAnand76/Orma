@@ -5,3 +5,5 @@ scikit-learn
 numpy
 ddgs
 rich
+python-dotenv
+requests
